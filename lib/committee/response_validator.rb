@@ -1,16 +1,13 @@
 module Committee
   class ResponseValidator
-    def initialize(link)
+    def initialize(link, options = {})
       @link = link
+      @validate_errors = options.fetch(:validate_errors, false)
 
       # we should eventually move off of validating against parent schema too
       # ... this is a Herokuism and not in the specification
       schema = link.target_schema || link.parent
       @validator = JsonSchema::Validator.new(schema)
-    end
-
-    def self.validate?(status)
-      status != 204 and @validate_errors || (200...300).include?(status)
     end
 
     def call(status, headers, data)
@@ -32,7 +29,7 @@ module Committee
         return if data == nil
       end
 
-      if self.class.validate?(status) && !@validator.validate(data)
+      if should_validate?(status) && !@validator.validate(data)
         errors = JsonSchema::SchemaError.aggregate(@validator.errors).join("\n")
         raise InvalidResponse, "Invalid response.\n\n#{errors}"
       end
@@ -49,6 +46,10 @@ module Committee
         raise Committee::InvalidResponse,
           %{"Content-Type" response header must be set to "#{@link.enc_type}".}
       end
+    end
+
+    def should_validate?(status)
+      status != 204 and @validate_errors || (200...300).include?(status)
     end
   end
 end
